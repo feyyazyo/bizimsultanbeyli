@@ -1,28 +1,19 @@
 // Cloudflare Pages Function — /api/news
-// Sultanbeyli haberleri. Google Haberler RSS + (boş dönerse) Bing Haberler yedeği.
-// Teşhis için: /api/news?debug=1
+// Bing Haberler (paralel, kategori başına) + haber sayfasından kapak görseli (og:image).
+// Teşhis: /api/news?debug=1
 
-const GQ = (q) =>
-  `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=tr&gl=TR&ceid=TR:tr`;
 const BING = (q) =>
-  `https://www.bing.com/news/search?q=${encodeURIComponent(q)}&format=RSS&setmkt=tr-TR`;
+  `https://www.bing.com/news/search?q=${encodeURIComponent(q)}&format=RSS&setmkt=tr-TR&count=20`;
 
 const FEEDS = [
-  { cat: "Gündem",   q: '"Sultanbeyli"' },
-  { cat: "Belediye", q: '"Sultanbeyli Belediyesi" OR "Ali Tombaş"' },
-  { cat: "Hizmet",   q: 'Sultanbeyli (su kesintisi OR İSKİ OR elektrik OR doğalgaz OR okul OR kar)' },
-  { cat: "Ulaşım",   q: 'Sultanbeyli (metro OR M5 OR trafik OR yol OR İETT)' },
-  { cat: "Spor",     q: '"Sultanbeyli Belediyespor"' },
+  { cat: "Gündem",   q: "Sultanbeyli" },
+  { cat: "Belediye", q: "Sultanbeyli Belediyesi" },
+  { cat: "Hizmet",   q: "Sultanbeyli su kesintisi OR İSKİ OR okul OR elektrik" },
+  { cat: "Ulaşım",   q: "Sultanbeyli metro OR M5 OR trafik OR yol" },
+  { cat: "Spor",     q: "Sultanbeyli Belediyespor" },
 ];
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-const HEADERS = {
-  "User-Agent": UA,
-  "Accept": "application/rss+xml, application/xml, text/xml; q=0.9, */*; q=0.8",
-  "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
-  // Google'ın AB onay (consent) duvarını atlamak için:
-  "Cookie": "CONSENT=YES+cb.20210720-07-p0.en+FX+410",
-};
 
 function decodeEntities(s) {
   return String(s)
@@ -36,6 +27,13 @@ function decodeEntities(s) {
 const clean = (s = "") =>
   decodeEntities(String(s)).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 
+function host(link) {
+  try {
+    let h = new URL(link).hostname.replace(/^www\./, "");
+    return h;
+  } catch { return ""; }
+}
+
 function parseItems(xml) {
   const out = [];
   const re = /<item>([\s\S]*?)<\/item>/g;
@@ -47,80 +45,82 @@ function parseItems(xml) {
       const x = r.exec(blk);
       return x ? x[1] : "";
     };
+    // görsel: media:content / enclosure / açıklamadaki img
+    let img = "";
+    const mc = blk.match(/<media:content[^>]+url=["']([^"']+)["']/i) ||
+               blk.match(/<enclosure[^>]+url=["']([^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']/i);
+    if (mc) img = mc[1];
     out.push({
       title: clean(get("title")),
       link: clean(get("link")),
       pub: clean(get("pubDate")),
-      source: clean(get("source")),
+      source: clean(get("source")) || clean(get("News:Source")),
       desc: clean(get("description")),
+      image: img && /^https?:\/\//i.test(img) ? img : null,
     });
   }
   return out;
 }
-function cleanTitle(t, source) {
-  if (source && t.toLowerCase().endsWith(" - " + source.toLowerCase()))
-    return t.slice(0, t.length - (source.length + 3)).trim();
-  return t;
-}
+
+function safeDate(s) { const d = new Date(s); return isNaN(d) ? null : d.toISOString(); }
 function usefulSummary(desc, title) {
   if (!desc) return "";
   const extra = desc.replace(title, "").trim();
-  return extra.length > 60 ? desc.slice(0, 280) : "";
+  return extra.length > 50 ? desc.slice(0, 280) : "";
 }
 
-async function fetchUrl(url) {
+async function fetchText(url, ms) {
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 9000);
+  const t = setTimeout(() => ctrl.abort(), ms);
   try {
-    const res = await fetch(url, { headers: HEADERS, signal: ctrl.signal, redirect: "follow" });
-    const text = await res.text();
-    return { ok: res.ok, status: res.status, text };
+    const res = await fetch(url, {
+      headers: { "User-Agent": UA, "Accept-Language": "tr-TR,tr;q=0.9" },
+      signal: ctrl.signal, redirect: "follow",
+    });
+    return { ok: res.ok, status: res.status, text: await res.text() };
   } catch (e) {
     return { ok: false, status: 0, text: "", err: String(e) };
-  } finally {
-    clearTimeout(t);
-  }
+  } finally { clearTimeout(t); }
 }
 
-function toItems(parsed, cat, fallbackSource) {
-  return parsed.map((it) => {
-    const source = it.source || fallbackSource || "Haber Kaynağı";
-    const title = cleanTitle(it.title, source);
-    return {
-      type: "feed", category: cat, source, title, link: it.link,
-      summary: usefulSummary(it.desc, title),
-      image: null,
-      date: it.pub ? safeDate(it.pub) : null,
-    };
-  }).filter((x) => x.title && x.link);
+async function ogImage(link) {
+  const r = await fetchText(link, 4500);
+  if (!r.ok) return null;
+  const html = r.text.slice(0, 250000);
+  const m =
+    html.match(/<meta[^>]+(?:property|name)=["']og:image(?::url)?["'][^>]*content=["']([^"']+)["']/i) ||
+    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]*(?:property|name)=["']og:image["']/i) ||
+    html.match(/<meta[^>]+(?:name|property)=["']twitter:image["'][^>]*content=["']([^"']+)["']/i);
+  const img = m && m[1];
+  return img && /^https?:\/\//i.test(img) ? img : null;
 }
-function safeDate(s) { const d = new Date(s); return isNaN(d) ? null : d.toISOString(); }
 
 export async function onRequest(context) {
   const url = new URL(context.request.url);
   const debug = url.searchParams.get("debug");
   const report = [];
+
+  // 1) Tüm kategorileri PARALEL çek
+  const results = await Promise.allSettled(
+    FEEDS.map(async (f) => {
+      const r = await fetchText(BING(f.q), 6500);
+      const parsed = r.ok ? parseItems(r.text) : [];
+      report.push({ cat: f.cat, status: r.status, bytes: r.text.length, items: parsed.length, sample: r.text.slice(0, 90) });
+      return parsed.map((it) => {
+        const source = it.source || host(it.link) || "Haber";
+        return {
+          type: "feed", category: f.cat, source,
+          title: it.title, link: it.link,
+          summary: usefulSummary(it.desc, it.title),
+          image: it.image, date: it.pub ? safeDate(it.pub) : null,
+        };
+      }).filter((x) => x.title && x.link);
+    })
+  );
   let items = [];
+  for (const r of results) if (r.status === "fulfilled") items = items.concat(r.value);
 
-  // 1) Google Haberler
-  for (const f of FEEDS) {
-    const r = await fetchUrl(GQ(f.q));
-    const parsed = r.ok ? parseItems(r.text) : [];
-    const mapped = toItems(parsed, f.cat);
-    items = items.concat(mapped);
-    report.push({ src: "google", cat: f.cat, status: r.status, bytes: r.text.length, items: mapped.length, sample: r.text.slice(0, 120) });
-  }
-
-  // 2) Google boş döndüyse Bing Haberler yedeği
-  if (items.length === 0) {
-    const r = await fetchUrl(BING("Sultanbeyli"));
-    const parsed = r.ok ? parseItems(r.text) : [];
-    const mapped = toItems(parsed, "Gündem", "Bing Haber");
-    items = items.concat(mapped);
-    report.push({ src: "bing", cat: "Gündem", status: r.status, bytes: r.text.length, items: mapped.length, sample: r.text.slice(0, 120) });
-  }
-
-  // tekrarları temizle + sırala
+  // tekrarları temizle + tarihe göre sırala
   const seen = new Set();
   items = items.filter((x) => {
     const k = x.title.toLowerCase().replace(/[^a-zçğıöşü0-9 ]/gi, "").slice(0, 70);
@@ -128,14 +128,20 @@ export async function onRequest(context) {
   });
   items.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
+  // 2) İlk 16 haber için kapak görseli (paralel, görseli olmayanlar)
+  const top = items.slice(0, 16);
+  await Promise.allSettled(top.map(async (it) => {
+    if (!it.image) it.image = await ogImage(it.link);
+  }));
+
   const body = debug
-    ? { updated: new Date().toISOString(), total: items.length, feeds: report }
+    ? { updated: new Date().toISOString(), total: items.length, withImage: items.filter(i => i.image).length, feeds: report }
     : { updated: new Date().toISOString(), items };
 
   return new Response(JSON.stringify(body), {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": debug ? "no-store" : "s-maxage=300, stale-while-revalidate=600",
+      "Cache-Control": debug ? "no-store" : "s-maxage=600, stale-while-revalidate=1200",
     },
   });
 }
