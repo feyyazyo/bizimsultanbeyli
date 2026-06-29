@@ -73,7 +73,7 @@
   .card .m .src{color:var(--accent)}
   .card h3{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:1.2rem;line-height:1.12;letter-spacing:-.012em;margin-bottom:8px;transition:color .15s}
   .card:hover h3{color:var(--accent)}
-  .card p{font-size:.96rem;color:var(--ink-2);line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .card p{font-size:.96rem;color:var(--ink-2);line-height:1.45;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
   .adcard{grid-column:1/-1;background:var(--paper-2);padding:18px;display:flex;align-items:center;justify-content:center;min-height:120px;text-align:center;color:var(--muted)}
   .adlabel{position:relative}
   .adlabel::before{content:"REKLAM";position:absolute;top:-8px;left:0;font-family:"Space Mono",monospace;font-size:.6rem;letter-spacing:.1em;color:var(--muted)}
@@ -218,13 +218,13 @@ function render(){
   const lead=list[0],top=list.slice(1,5),rest=list.slice(5,29);
   let html=`<section class="lead"><article class="hero" data-idx="${lead._i}">
     <div class="kick mono"><span>● ${lead.type==="original"?"YEREL":"MANŞET"}</span><span class="src">${lead.type==="original"?esc(lead.author||"Bizim Sultanbeyli"):esc(lead.source)} · ${timeAgo(lead.date)}</span></div>
-    ${imgTag(lead,"img")}<h2>${esc(lead.title)}</h2>${(lead.summary||lead.body)?`<p>${esc((lead.summary||lead.body)).slice(0,200)}</p>`:""}</article>
+    ${imgTag(lead,"img")}<h2>${esc(lead.title)}</h2>${(lead.summary||lead.body)?`<p>${esc((lead.summary||lead.body)).slice(0,320)}</p>`:""}</article>
     <aside class="toplist"><div class="lh mono">Öne Çıkanlar</div>
     ${top.map(it=>`<div class="ti" data-idx="${it._i}"><div class="m mono"><span class="src">${srcLabel(it)}</span><span>${timeAgo(it.date)}</span></div><h3>${esc(it.title)}</h3></div>`).join("")}
     </aside></section><div class="feed-h">${activeCat==="Tümü"?"Akış":esc(activeCat)}</div><div class="grid">`;
   rest.forEach((it,i)=>{
     const sum=it.summary||it.body||"";
-    html+=`<article class="card" data-idx="${it._i}">${imgTag(it,"img")}<div class="m mono"><span class="src">${srcLabel(it)}</span><span>${timeAgo(it.date)}</span></div><h3>${esc(it.title)}</h3>${sum?`<p>${esc(sum).slice(0,180)}</p>`:""}</article>`;
+    html+=`<article class="card" data-idx="${it._i}">${imgTag(it,"img")}<div class="m mono"><span class="src">${srcLabel(it)}</span><span>${timeAgo(it.date)}</span></div><h3>${esc(it.title)}</h3>${sum?`<p>${esc(sum).slice(0,280)}</p>`:""}</article>`;
     if((i+1)%AD_EVERY===0&&i<rest.length-1)html+=`<div class="adcard adlabel"><span>Akış içi reklam · responsive</span></div>`;
   });
   html+=`</div>`;$("#main").innerHTML=html;
