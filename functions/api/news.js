@@ -66,7 +66,7 @@ function safeDate(s) { const d = new Date(s); return isNaN(d) ? null : d.toISOSt
 function usefulSummary(desc, title) {
   if (!desc) return "";
   const extra = desc.replace(title, "").trim();
-  return extra.length > 50 ? desc.slice(0, 280) : "";
+  return extra.length > 50 ? desc.slice(0, 400) : "";
 }
 
 async function fetchText(url, ms) {
@@ -83,16 +83,22 @@ async function fetchText(url, ms) {
   } finally { clearTimeout(t); }
 }
 
-async function ogImage(link) {
+// Haber sayfasından hem kapak görseli hem de daha dolu özet (og/meta description) çeker
+async function ogMeta(link) {
   const r = await fetchText(link, 4500);
-  if (!r.ok) return null;
+  if (!r.ok) return { image: null, desc: "" };
   const html = r.text.slice(0, 250000);
-  const m =
-    html.match(/<meta[^>]+(?:property|name)=["']og:image(?::url)?["'][^>]*content=["']([^"']+)["']/i) ||
-    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]*(?:property|name)=["']og:image["']/i) ||
-    html.match(/<meta[^>]+(?:name|property)=["']twitter:image["'][^>]*content=["']([^"']+)["']/i);
-  const img = m && m[1];
-  return img && /^https?:\/\//i.test(img) ? img : null;
+  const pick = (re) => { const m = html.match(re); return m ? clean(m[1]) : ""; };
+  let image =
+    pick(/<meta[^>]+(?:property|name)=["']og:image(?::url)?["'][^>]*content=["']([^"']+)["']/i) ||
+    pick(/<meta[^>]+content=["']([^"']+)["'][^>]*(?:property|name)=["']og:image["']/i) ||
+    pick(/<meta[^>]+(?:name|property)=["']twitter:image["'][^>]*content=["']([^"']+)["']/i);
+  if (image && !/^https?:\/\//i.test(image)) image = "";
+  let desc =
+    pick(/<meta[^>]+(?:property|name)=["']og:description["'][^>]*content=["']([^"']+)["']/i) ||
+    pick(/<meta[^>]+(?:name|property)=["']description["'][^>]*content=["']([^"']+)["']/i) ||
+    pick(/<meta[^>]+content=["']([^"']+)["'][^>]*(?:property|name)=["']og:description["']/i);
+  return { image: image || null, desc: desc.slice(0, 400) };
 }
 
 export async function onRequest(context) {
@@ -128,10 +134,13 @@ export async function onRequest(context) {
   });
   items.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
-  // 2) İlk 16 haber için kapak görseli (paralel, görseli olmayanlar)
-  const top = items.slice(0, 16);
+  // 2) İlk 18 haber için kapak görseli + daha dolu özet (paralel)
+  const top = items.slice(0, 18);
   await Promise.allSettled(top.map(async (it) => {
-    if (!it.image) it.image = await ogImage(it.link);
+    const meta = await ogMeta(it.link);
+    if (!it.image && meta.image) it.image = meta.image;
+    if (meta.desc && meta.desc.length > 80 && meta.desc.length > (it.summary || "").length)
+      it.summary = meta.desc;
   }));
 
   const body = debug
