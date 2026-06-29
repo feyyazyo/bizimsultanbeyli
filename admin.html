@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Yayın Paneli — Bizim Sultanbeyli</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Newsreader:wght@400;500&family=Space+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{--paper:#FAF8F3;--paper-2:#F3EFE6;--ink:#15130F;--ink-2:#2A2622;--muted:#7C746C;--accent:#DD3B1A;--line:rgba(21,19,15,.14);--ok:#2E7D32}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);font-family:"Newsreader",serif;font-size:17px;line-height:1.5;padding:0 0 60px}
+  .bar{border-bottom:1.5px solid var(--ink);padding:16px 22px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--paper);z-index:5}
+  .bar h1{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:1.3rem}
+  .bar a{font-family:"Space Mono",monospace;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);text-decoration:none}
+  .wrap{max-width:760px;margin:0 auto;padding:26px 22px}
+  .mono{font-family:"Space Mono",monospace;font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  label{display:block;margin:16px 0 6px;font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:.95rem}
+  input,select,textarea{width:100%;border:1px solid var(--line);background:#fff;padding:11px 13px;font-family:"Newsreader",serif;font-size:1rem;color:var(--ink);border-radius:3px}
+  input:focus,select,textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+  textarea{min-height:240px;resize:vertical;line-height:1.55}
+  .row{display:flex;gap:12px}.row>*{flex:1}
+  button{cursor:pointer;border:none;font-family:"Bricolage Grotesque",sans-serif;font-weight:700;border-radius:3px;padding:12px 18px;font-size:.95rem}
+  .primary{background:var(--accent);color:#fff}.primary:hover{background:var(--ink)}
+  .ghost{background:none;border:1.5px solid var(--line);color:var(--ink)}.ghost:hover{border-color:var(--ink)}
+  .ink{background:var(--ink);color:var(--paper)}
+  .card{border:1.5px solid var(--ink);padding:22px;margin-bottom:24px;background:var(--paper)}
+  .card h2{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:1.15rem;margin-bottom:4px}
+  .hint{font-size:.9rem;color:var(--muted);margin-bottom:10px}
+  .msg{padding:10px 13px;border-radius:3px;font-size:.92rem;margin-top:12px;display:none}
+  .msg.show{display:block}
+  .msg.err{background:#fdecea;color:#a32}.msg.ok{background:#e8f5e9;color:var(--ok)}
+  .post{border:1px solid var(--line);padding:13px 15px;margin-bottom:10px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+  .post .t{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;line-height:1.2}
+  .post .meta{font-size:.78rem;color:var(--muted);margin-top:3px}
+  .post button{background:none;border:1px solid var(--line);color:#a32;padding:6px 11px;font-size:.78rem}
+  .gate{max-width:420px;margin:60px auto;text-align:center}
+  .gate h2{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:1.4rem;margin-bottom:8px}
+  .hidden{display:none}
+  .spin{display:inline-block;width:15px;height:15px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:r .7s linear infinite;vertical-align:-2px;margin-right:6px}
+  @keyframes r{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="bar"><h1>Yayın Paneli</h1><a href="/">← Siteye dön</a></div>
+
+<div class="gate" id="gate">
+  <h2>Giriş</h2>
+  <p class="hint">Cloudflare'de tanımladığın <b>ADMIN_TOKEN</b>'ı gir.</p>
+  <input type="password" id="token" placeholder="Yönetici anahtarı" />
+  <div style="height:10px"></div>
+  <button class="primary" style="width:100%" onclick="enter()">Gir</button>
+  <div class="msg err" id="gateMsg"></div>
+</div>
+
+<div class="wrap hidden" id="panel">
+  <div class="card">
+    <h2>AI ile taslak oluştur <span class="mono">opsiyonel</span></h2>
+    <p class="hint">Bir konu yaz, taslağı aşağıdaki forma doldursun. Yayınlamadan önce mutlaka oku ve düzenle.</p>
+    <div class="row">
+      <input type="text" id="topic" placeholder="örn. Sultanbeyli'de su kesintisinde ne yapmalı?" />
+      <button class="ink" style="flex:0 0 auto" onclick="draft()" id="draftBtn">Taslak oluştur</button>
+    </div>
+    <div class="msg err" id="draftMsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Yeni yazı</h2>
+    <div class="row">
+      <div><label>Kategori</label>
+        <select id="category"><option>Yerel</option><option>Gündem</option><option>Belediye</option><option>Hizmet</option><option>Ulaşım</option><option>Spor</option></select>
+      </div>
+      <div><label>Yazar</label><input type="text" id="author" placeholder="Editör" value="Editör" /></div>
+    </div>
+    <label>Başlık</label><input type="text" id="title" placeholder="Yazı başlığı" />
+    <label>Görsel bağlantısı <span class="mono">opsiyonel</span></label><input type="text" id="image" placeholder="https://... (kendi/serbest görselin)" />
+    <label>Metin</label><textarea id="body" placeholder="Yazının tamamı. Paragrafları boş satırla ayır."></textarea>
+    <div style="height:14px"></div>
+    <button class="primary" onclick="publish()" id="pubBtn">Yayınla</button>
+    <button class="ghost" onclick="clearForm()">Temizle</button>
+    <div class="msg" id="pubMsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Yayınlanmış yazılar</h2>
+    <div id="list"><p class="hint">Yükleniyor…</p></div>
+  </div>
+</div>
+
+<script>
+let TOKEN="";
+const $=s=>document.querySelector(s);
+function show(el,txt,kind){el.textContent=txt;el.className="msg show "+(kind||"err");}
+function hide(el){el.className="msg";}
+async function enter(){
+  TOKEN=$("#token").value.trim();
+  if(!TOKEN){show($("#gateMsg"),"Anahtar gir.");return;}
+  // doğrulama: korumalı uç noktaya boş POST atıp 401 mi diye bak
+  const r=await fetch("/api/posts",{method:"POST",headers:{"x-admin-token":TOKEN,"Content-Type":"application/json"},body:"{}"});
+  if(r.status===401){show($("#gateMsg"),"Anahtar yanlış.");return;}
+  $("#gate").classList.add("hidden");$("#panel").classList.remove("hidden");loadList();
+}
+async function draft(){
+  const topic=$("#topic").value.trim();hide($("#draftMsg"));
+  if(!topic){show($("#draftMsg"),"Konu gir.");return;}
+  const btn=$("#draftBtn");btn.innerHTML='<span class="spin"></span>Yazıyor…';btn.disabled=true;
+  try{
+    const r=await fetch("/api/draft",{method:"POST",headers:{"x-admin-token":TOKEN,"Content-Type":"application/json"},body:JSON.stringify({topic})});
+    const d=await r.json();
+    if(!r.ok){show($("#draftMsg"),d.error||"Taslak oluşturulamadı.");}
+    else{$("#title").value=d.draft.title||topic;$("#body").value=d.draft.body||"";show($("#draftMsg"),d.note||"Taslak hazır — düzenleyip yayınla.","ok");}
+  }catch(e){show($("#draftMsg"),"Hata: "+e);}
+  btn.innerHTML="Taslak oluştur";btn.disabled=false;
+}
+async function publish(){
+  hide($("#pubMsg"));
+  const post={title:$("#title").value.trim(),body:$("#body").value.trim(),image:$("#image").value.trim(),category:$("#category").value,author:$("#author").value.trim()};
+  if(!post.title||!post.body){show($("#pubMsg"),"Başlık ve metin zorunlu.");return;}
+  const btn=$("#pubBtn");btn.innerHTML='<span class="spin"></span>Yayınlanıyor…';btn.disabled=true;
+  try{
+    const r=await fetch("/api/posts",{method:"POST",headers:{"x-admin-token":TOKEN,"Content-Type":"application/json"},body:JSON.stringify(post)});
+    const d=await r.json();
+    if(!r.ok)show($("#pubMsg"),d.error||"Yayınlanamadı.");
+    else{show($("#pubMsg"),"✓ Yayınlandı! Sitede görünür.","ok");clearForm();loadList();}
+  }catch(e){show($("#pubMsg"),"Hata: "+e);}
+  btn.innerHTML="Yayınla";btn.disabled=false;
+}
+function clearForm(){["title","image","body","topic"].forEach(id=>$("#"+id).value="");$("#author").value="Editör";$("#category").value="Yerel";}
+async function loadList(){
+  try{
+    const r=await fetch("/api/posts",{cache:"no-store"});const d=await r.json();
+    if(!d.items||!d.items.length){$("#list").innerHTML='<p class="hint">Henüz yazı yok.</p>';return;}
+    $("#list").innerHTML=d.items.map(p=>`<div class="post"><div><div class="t">${escp(p.title)}</div><div class="meta">${escp(p.category)} · ${escp(p.author||"")} · ${new Date(p.date).toLocaleDateString("tr-TR")}</div></div><button onclick="del('${p.id}')">Sil</button></div>`).join("");
+  }catch(e){$("#list").innerHTML='<p class="hint">Liste yüklenemedi.</p>';}
+}
+async function del(id){
+  if(!confirm("Bu yazı silinsin mi?"))return;
+  await fetch("/api/posts?id="+encodeURIComponent(id),{method:"DELETE",headers:{"x-admin-token":TOKEN}});
+  loadList();
+}
+const escp=s=>String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+$("#token").addEventListener("keydown",e=>{if(e.key==="Enter")enter();});
+</script>
+</body>
+</html>
